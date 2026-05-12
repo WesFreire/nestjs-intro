@@ -1,7 +1,7 @@
 import { PatchPostDto } from './../dtos/patch-post.dto';
 import { TagsService } from './../../tags/providers/tags.service';
 import { CreatePostDto } from '../dtos/create-post.dto';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, RequestTimeoutException } from '@nestjs/common';
 import { UsersService } from 'src/users/providers/users.service';
 import { Repository } from 'typeorm';
 import { Post } from '../post.entity';
@@ -28,7 +28,7 @@ export class PostsService {
      * Injecting Tags service
      */
     private readonly tagsService: TagsService,
-  ) {}
+  ) { }
 
   /**
    * Method to create a new post
@@ -79,16 +79,56 @@ export class PostsService {
    */
   public async update(patchPostDto: PatchPostDto) {
     // Find new tags
-    let tags = await this.tagsService.findMultipleTags(patchPostDto.tags);
 
-    // Update the post
-    let post = await this.postsRepository.findOneBy({
-      id: patchPostDto.id,
-    });
+    let tags = undefined
+    let post = undefined
+
+    try {
+      //try to find
+      tags = await this.tagsService.findMultipleTags(patchPostDto.tags);
+    }
+    catch (error) {
+      // Error
+      throw new RequestTimeoutException(
+        'Unable to process your request at the moment please try later',
+      )
+    }
+
+    // Number of tags needs to be equal
+    if (!tags || tags.lenght !== patchPostDto.tags.length) {
+      throw new BadRequestException(
+        'Please check your tag Ids and ensure they are correct')
+    }
+
+    // Find the post
+    try {
+      post = await this.postsRepository.findOneBy({
+        id: patchPostDto.id,
+      });
+    } catch (error) {
+      throw new RequestTimeoutException(
+        'Unable to process your request at the moment please try later',
+      )
+    }
+
+    if (!post) {
+      throw new BadRequestException(
+        'Post Id does not exist.')
+    }
 
     // Update the tags
     post.tags = tags;
 
-    return await this.postsRepository.save(post);
+
+    // Save the post and return
+    try {
+      await this.postsRepository.save(post);
+    } catch (error) {
+      throw new RequestTimeoutException(
+        'Unable to precess your request at the moment please try later'
+      )
+    }
+
+    return post
   }
 }
